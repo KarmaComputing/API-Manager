@@ -1,0 +1,25 @@
+FROM registry.access.redhat.com/ubi9/python-39 AS builder
+USER root
+RUN dnf update -y
+RUN dnf  install python3-psycopg2 -y
+ADD . /app
+RUN  cp /app/.github/local_settings_container.py /app/apimanager/apimanager/local_settings.py
+RUN pip install -r /app/requirements.txt
+RUN mkdir /logs
+RUN touch /logs/gunicorn.access.log
+RUN touch /logs/gunicorn.error.log
+RUN chgrp -R 0 /logs && chmod -R g+rwX /logs
+RUN chown  501 /
+RUN chown -R 501 /app
+RUN chgrp -R 0 /app && chmod -R g+rwX /app
+USER 501
+WORKDIR /app
+RUN python ./apimanager/manage.py collectstatic --noinput
+
+FROM nginxinc/nginx-unprivileged
+COPY --from=builder /app/apimanager/static /usr/share/nginx/html/static/
+USER 0
+RUN chgrp -R 0 /usr/share/nginx/ && chmod -R g+rX /usr/share/nginx/
+RUN chgrp -R 0 /var/cache/nginx/ && chmod -R g+rwX /var/cache/nginx/
+RUN chown -R 1001 /usr/share/nginx/
+USER 1001
